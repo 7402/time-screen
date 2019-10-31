@@ -1,11 +1,20 @@
 /*
+
+Release build:
 sudo apt-get install libcairo2-dev
-g++ -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screen
+g++ -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screen
+
+Development build:
+sudo apt-get install libcairo2-dev
+g++ -DDEV -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screend
 
 # turn off blinking cursor
 sudo su - -c "echo 0 > /sys/class/graphics/fbcon/cursor_blink"
 
 ./time-screen
+or
+./time-screend 20
+./time-screend
 
 # turn on blinking cursor
 sudo su - -c "echo 1 > /sys/class/graphics/fbcon/cursor_blink"
@@ -36,6 +45,9 @@ sudo su - -c "echo 1 > /sys/class/graphics/fbcon/cursor_blink"
 // #include <libssh/sftp.h>
 
 #include "note.hpp"
+
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
 
 using namespace std;
 
@@ -214,7 +226,7 @@ void draw_time(cairo_t *cr, double dim)
 		oss << "Night";
 	}
 
-	cairo_select_font_face(cr, "Liberation-Serif",
+	cairo_select_font_face(cr, "DejaVuSans",
 							CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
 
 	double x = 512;
@@ -408,10 +420,14 @@ int main(int argc, char **argv) {
 		cairo_pop_group_to_source(cr);
 		cairo_paint_with_alpha(cr, 1.0);
 		
-		if (text_changed) {
+		if (text_changed || k == 0) {
+		#ifdef DEV
+			cairo_surface_write_to_png(surface, "/home/pi/Projects/screend.png");
+			system("scp -q /home/pi/Projects/screend.png relay@" STRING(SERVER) ":/var/www/html/relay/ &");
+		#else
 			cairo_surface_write_to_png(surface, "/home/pi/Projects/screen.png");
-			// system("scp -q /home/pi/Projects/screen.png relay@myserver.xyz:/home/relay/ &");
-			system("scp -q /home/pi/Projects/screen.png relay@myserver.xyz:/var/www/html/relay/ &");
+			system("scp -q /home/pi/Projects/screen.png relay@" STRING(SERVER) ":/var/www/html/relay/ &");
+		#endif
 			old_text = new_text;
 		}
 		
