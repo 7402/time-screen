@@ -1,12 +1,12 @@
 /*
-
-Release build:
+Install library
 sudo apt-get install libcairo2-dev
-g++ -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screen
 
-Development build:
-sudo apt-get install libcairo2-dev
-g++ -DDEV -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screend
+Release build: [change myserver.xyz to server domain]
+# g++ -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screen
+
+Development build: [change myserver.xyz to server domain]
+# g++ -DDEV -DSERVER=myserver.xyz -Wall -g time-screen.cpp note.cpp -I/usr/include/cairo -L/usr/lib/arm-linux-gnueabihf/ -lcairo -o time-screend
 
 # turn off blinking cursor
 sudo su - -c "echo 0 > /sys/class/graphics/fbcon/cursor_blink"
@@ -90,9 +90,11 @@ void show_centered_text2(cairo_t *cr, const char *text1, const char *text2, doub
 	*y += line;
 }
 
-void draw_info(cairo_t *cr);
-void draw_info(cairo_t *cr)
+bool draw_info(cairo_t *cr);
+bool draw_info(cairo_t *cr)
 {
+	bool showing_ip = false;
+
 	cairo_set_source_rgb(cr, 0.0, 0.5, 0.0);
 	cairo_set_font_size(cr, 20);
 
@@ -114,6 +116,7 @@ void draw_info(cairo_t *cr)
                     if (strcmp(host, "127.0.0.1") != 0) {
 						text += " ";
                     	text += host;
+                    	showing_ip = true;
                     }
                 }
 			}
@@ -126,6 +129,8 @@ void draw_info(cairo_t *cr)
 	
 	cairo_move_to(cr, 20, 310);
 	cairo_show_text(cr, text.c_str());
+	
+	return showing_ip;
 }
 
 void draw_notes(cairo_t *cr, double dim);
@@ -367,6 +372,8 @@ int main(int argc, char **argv) {
     time_t start_time = now;
     
     string old_text = "";
+    
+    bool sent_initial_screen = false;
 
 	for (int k = 0; now < start_time + run_for_secs || run_for_secs == 0; k++) {
 		read_local_notes("/home/pi/Projects/notes.txt");
@@ -398,7 +405,7 @@ int main(int argc, char **argv) {
 			}
 		}
 		
-		bool text_changed = k == 0 || old_text.compare(new_text) != 0;
+		bool text_changed = old_text.compare(new_text) != 0;
 
 		double dim = use_dim ? dim_value : 1.0;
 	
@@ -415,12 +422,13 @@ int main(int argc, char **argv) {
 		draw_notes(cr, dim);
 		cairo_surface_flush(surface);
 
-		if (first_2_min) draw_info(cr);
+		bool showing_ip = false;
+		if (first_2_min) showing_ip = draw_info(cr);
 
 		cairo_pop_group_to_source(cr);
 		cairo_paint_with_alpha(cr, 1.0);
 		
-		if (text_changed || k == 0) {
+		if (text_changed || (!sent_initial_screen && showing_ip)) {
 		#ifdef DEV
 			cairo_surface_write_to_png(surface, "/home/pi/Projects/screend.png");
 			system("scp -q /home/pi/Projects/screend.png relay@" STRING(SERVER) ":/var/www/html/relay/ &");
@@ -429,6 +437,7 @@ int main(int argc, char **argv) {
 			system("scp -q /home/pi/Projects/screen.png relay@" STRING(SERVER) ":/var/www/html/relay/ &");
 		#endif
 			old_text = new_text;
+			sent_initial_screen = true;
 		}
 		
 		if (first_2_min) {
